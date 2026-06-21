@@ -1,3 +1,6 @@
+"scripts": {
+  ...
+}
 {
     "name":  "pos-machine",
     "version":  "1.0.0",
