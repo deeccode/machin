@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import { Icon } from "../../components/Icon";
 import { fmt } from "../../utils/format";
 
@@ -7,6 +7,8 @@ export const POSSearchPanel = ({
   searchQuery,
   searchResults,
   scanning,
+  lastBarcode,
+  lastScannedProduct,
   videoRef,
   onSearch,
   onManualBarcode,
@@ -166,6 +168,63 @@ export const POSSearchPanel = ({
           marginTop: 6, 
           animation: "pulse 1.5s infinite" 
           }}>Scanning...</div>}
+      {lastScannedProduct && (
+        <div
+          style={{
+            marginTop: 10,
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid rgba(34,197,94,0.22)",
+            background: "rgba(34,197,94,0.08)"
+          }}>
+          <div
+            style={{
+              color: "#86efac",
+              fontSize: 11,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: 0,
+              marginBottom: 6
+            }}>
+            Product found
+          </div>
+          <div
+            style={{
+              color: "#e2e8f0",
+              fontSize: 13,
+              fontWeight: 700,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }}>
+            {lastScannedProduct.name}
+          </div>
+          <div
+            style={{
+              color: "#64748b",
+              fontSize: 11,
+              marginTop: 3,
+              overflowWrap: "anywhere"
+            }}>
+            Barcode: {lastScannedProduct.barcode || lastBarcode}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              marginTop: 8
+            }}>
+            <span style={{ color: "#94a3b8", fontSize: 11 }}>
+              {lastScannedProduct.category} | Stock: {lastScannedProduct.stock}
+            </span>
+            <span style={{ color: "#22c55e", fontSize: 13, fontWeight: 800 }}>
+              {fmt(lastScannedProduct.price, cur)}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
 
     <div style={{
