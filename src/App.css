@@ -13,6 +13,12 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
+  background: #0f172a;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100dvh;
 }
 
 input,
@@ -34,14 +40,17 @@ table {
 
 .app-main {
   min-width: 0;
+  background: #0f172a;
 }
 
 @media (max-width: 768px) {
   .app-shell {
     position: relative;
-    width: 100%;
+    width: 100vw !important;
     height: 100dvh !important;
+    min-height: 100dvh !important;
     overflow: hidden !important;
+    background: #0f172a !important;
   }
 
   .app-sidebar {
@@ -135,8 +144,11 @@ table {
   }
 
   .app-main {
-    width: 100%;
+    width: 100vw;
+    height: 100%;
     min-height: 0;
+    overflow: hidden;
+    background: #0f172a;
   }
 }
 
@@ -215,16 +227,22 @@ table {
 @media (max-width: 768px) {
   .auth-page {
     align-items: stretch !important;
+    justify-content: flex-start !important;
+    width: 100vw !important;
+    height: 100dvh !important;
     min-height: 100dvh !important;
-    padding: 16px !important;
+    padding: 12px !important;
     overflow-y: auto;
+    overflow-x: hidden;
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f2027 100%) !important;
+    -webkit-overflow-scrolling: touch;
   }
 
   .auth-card {
     width: 100% !important;
     max-width: 420px;
-    margin: auto;
-    padding: 24px !important;
+    margin: auto !important;
+    padding: 20px !important;
     border-radius: 16px !important;
   }
 
@@ -238,7 +256,13 @@ table {
   }
 
   .dashboard-page {
-    padding: 16px !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    padding: 14px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    background: #0f172a !important;
   }
 
   .dashboard-heading {
@@ -254,10 +278,13 @@ table {
   .pos-layout {
     display: flex !important;
     flex-direction: column;
-    height: auto !important;
-    min-height: 100%;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
+    background: #0f172a !important;
+    -webkit-overflow-scrolling: touch;
   }
 
   .pos-search-panel,
@@ -274,7 +301,8 @@ table {
   }
 
   .pos-cart-panel {
-    min-height: 360px;
+    min-height: 320px;
+    flex: 0 0 auto !important;
   }
 
   .pos-summary-panel {
@@ -382,10 +410,13 @@ table {
   .suppliers-page,
   .settings-page,
   .users-page {
+    width: 100% !important;
     height: 100% !important;
+    min-height: 0 !important;
     padding: 16px !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
+    background: #0f172a !important;
   }
 
   .products-page {
@@ -408,8 +439,86 @@ table {
 
   .products-table-wrap {
     padding: 0 16px 16px !important;
-    overflow-x: auto !important;
+    overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .products-table {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin-top: 0 !important;
+    border-collapse: separate !important;
+  }
+
+  .products-table thead {
+    display: none !important;
+  }
+
+  .products-table tbody {
+    display: grid !important;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    width: 100%;
+    padding-top: 12px;
+  }
+
+  .products-row {
+    display: grid !important;
+    grid-template-columns: 1fr;
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 12px !important;
+    border: 1px solid rgba(255, 255, 255, 0.07) !important;
+    border-radius: 12px;
+    background: #1e293b;
+    box-shadow: none !important;
+  }
+
+  .products-row td {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 8px 0 !important;
+    border: 0 !important;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .products-row td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0;
+  }
+
+  .products-row .products-product-cell {
+    align-items: flex-start;
+    padding-top: 0 !important;
+  }
+
+  .products-row .products-product-cell::before {
+    display: none;
+  }
+
+  .products-row .products-product-cell > div {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .products-row td:last-child {
+    padding-bottom: 0 !important;
+  }
+
+  .products-row td:last-child > div {
+    margin-left: auto;
   }
 
   .settings-card {
@@ -431,8 +540,10 @@ table {
   .users-modal-card {
     width: 100% !important;
     max-width: 540px;
+    max-height: calc(100dvh - 24px);
     margin: 0 auto !important;
     border-radius: 14px !important;
+    overflow-y: auto !important;
   }
 
   .products-modal-card,
@@ -521,7 +632,12 @@ table {
   }
 
   .auth-card {
-    padding: 20px !important;
+    padding: 16px !important;
+    border-radius: 14px !important;
+  }
+
+  .auth-card h1 {
+    font-size: 21px !important;
   }
 
   .products-table-wrap {
