@@ -31,8 +31,31 @@ export const LS = {
 
 export const seedDemoData = () => { 
 
-  if (LS.get("pos_seeded")) 
+  const syncProductBarcodes = () => {
+    const products = LS.get("pos_products", []);
+    if (!products.length) return;
+
+    const barcodeUpdates = {
+      "Coca Cola 500ml": "5449000000966",
+      "Coca-Cola 500ml": "5449000000966",
+      "Fanta": "9300675003414",
+    };
+
+    let changed = false;
+    const updated = products.map((product) => {
+      const barcode = barcodeUpdates[product.name];
+      if (!barcode || product.barcode === barcode) return product;
+      changed = true;
+      return { ...product, barcode };
+    });
+
+    if (changed) LS.set("pos_products", updated);
+  };
+
+  if (LS.get("pos_seeded")) {
+    syncProductBarcodes();
     return; 
+  }
   const users = [ 
 
     { id: "u1", 
@@ -100,7 +123,7 @@ export const seedDemoData = () => {
            }, 
 
     { id: "p4", 
-      barcode: "0049000050202",
+      barcode: "5449000000966",
        name: "Coca Cola 500ml",
         category: "Beverages",
          price: 200, cost: 120,
@@ -195,7 +218,7 @@ export const seedDemoData = () => {
       }, 
 
       { id: "p11", 
-      barcode: "5200132546415", 
+      barcode: "9300675003414", 
       name: "Fanta", 
       category: "Drinks",
        price: 300, 
@@ -265,5 +288,7 @@ export const seedDemoData = () => {
   LS.set("pos_transactions",[]); 
 
   LS.set("pos_seeded",true); 
+
+  syncProductBarcodes();
 }; 
 // explain this codes line by line to me like a 5 years old baby after finish explaining  tell me what all the  codes does in one sentence
