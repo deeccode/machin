@@ -25,6 +25,8 @@ export const POSScreen = ({ user, settings, notify }) => {
   const scanIntervalRef = useRef(null);
   const scanningRef = useRef(false);
   const lastBarcodeRef = useRef("");
+  const lastScanTimeRef = useRef(0);
+  const lastScanFoundRef = useRef(false);
 
   const cur = settings.currency || "\u20a6";
   const tax = (settings.taxRate || 0) / 100;
@@ -64,14 +66,16 @@ export const POSScreen = ({ user, settings, notify }) => {
     const products = LS.get("pos_products", []);
     const results = products.filter((product) =>
       String(product.name || "").toLowerCase().includes(q) ||
-      normalizeBarcode(product.barcode).includes(barcodeQuery) ||
+      (barcodeQuery && normalizeBarcode(product.barcode).includes(barcodeQuery)) ||
       String(product.category || "").toLowerCase().includes(q)
     );
 
     setSearchResults(results.slice(0, 8));
   };
 
-  const addToCart = (product) => {
+  const addToCart = (product, options = {}) => {
+    const shouldClearSearch = options.clearSearch !== false;
+
     if (product.stock <= 0) {
       notify("Out of stock!", "error");
       return;
@@ -90,8 +94,10 @@ export const POSScreen = ({ user, settings, notify }) => {
       return prev.map((item) => item.id === product.id ? { ...item, qty: item.qty + 1 } : item);
     });
 
-    setSearchQuery("");
-    setSearchResults([]);
+    if (shouldClearSearch) {
+      setSearchQuery("");
+      setSearchResults([]);
+    }
   };
 
   const removeFromCart = (id) => setCart((prev) => prev.filter((item) => item.id !== id));
@@ -115,17 +121,29 @@ export const POSScreen = ({ user, settings, notify }) => {
     }).filter(Boolean));
   };
 
+  const showScannedProduct = (code, product) => {
+    setLastBarcode(code);
+    setLastScannedProduct(product);
+    setSearchQuery(product.barcode || code);
+    setSearchResults([product]);
+  };
+
   const handleBarcodeDetected = (code) => {
     const product = findProductByBarcode(code);
 
     if (product) {
-      setLastScannedProduct(product);
-      addToCart(product);
+      showScannedProduct(code, product);
+      addToCart(product, { clearSearch: false });
       notify(`Added: ${product.name} - ${cur}${product.price}`, "success");
-      return;
+      return true;
     }
 
+    setLastBarcode(code);
+    setLastScannedProduct(null);
+    setSearchQuery(code);
+    setSearchResults([]);
     notify(`Barcode ${code} not found in system`, "error");
+    return false;
   };
 
   const startScanning = async () => {
@@ -151,10 +169,15 @@ if (videoRef.current) videoRef.current.srcObject = stream;
             if (!barcodes.length) return;
 
             const code = barcodes[0].rawValue;
-            if (code && code !== lastBarcodeRef.current) {
-              lastBarcodeRef.current = code;
-              setLastBarcode(code);
-              handleBarcodeDetected(code);
+            const normalizedCode = normalizeBarcode(code);
+            const now = Date.now();
+            const isSameBarcode = normalizedCode && normalizedCode === lastBarcodeRef.current;
+            const shouldRetryMissingBarcode = isSameBarcode && !lastScanFoundRef.current && now - lastScanTimeRef.current > 1800;
+
+            if (normalizedCode && (!isSameBarcode || shouldRetryMissingBarcode)) {
+              lastBarcodeRef.current = normalizedCode;
+              lastScanTimeRef.current = now;
+              lastScanFoundRef.current = handleBarcodeDetected(code);
             }
           } catch {}
         };
@@ -185,6 +208,8 @@ if (videoRef.current) videoRef.current.srcObject = stream;
 
     if (videoRef.current) videoRef.current.srcObject = null;
     lastBarcodeRef.current = "";
+    lastScanTimeRef.current = 0;
+    lastScanFoundRef.current = false;
     setScanning(false);
     setLastBarcode("");
     setLastScannedProduct(null);
@@ -197,12 +222,9 @@ if (videoRef.current) videoRef.current.srcObject = stream;
     const product = findProductByBarcode(code);
 
     if (product) {
-      setLastBarcode(code);
-      setLastScannedProduct(product);
-      addToCart(product);
+      showScannedProduct(code, product);
+      addToCart(product, { clearSearch: false });
       notify(`Added: ${product.name} - ${cur}${product.price}`, "success");
-      setSearchQuery("");
-      setSearchResults([]);
       return;
     }
 
