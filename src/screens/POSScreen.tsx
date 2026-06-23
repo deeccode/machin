@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import { useEffect, useRef, useState } from "react";
 // use reference is used to keep and update a value later 
 import { LS } from "../utils/storage";
@@ -18,6 +18,7 @@ export const POSScreen = ({ user, settings, notify }) => {
   const [paymentMode, setPaymentMode] = useState(false);
   const [receipt, setReceipt] = useState(null);
   const [lastBarcode, setLastBarcode] = useState("");
+  const [lastScannedProduct, setLastScannedProduct] = useState(null);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -34,6 +35,21 @@ export const POSScreen = ({ user, settings, notify }) => {
   const taxAmt = (subtotal - discountAmt) * tax;
   const total = subtotal - discountAmt + taxAmt;
 
+  const normalizeBarcode = (code = "") => String(code).replace(/\D/g, "");
+
+  const findProductByBarcode = (code) => {
+    const scannedCode = normalizeBarcode(code);
+    if (!scannedCode) return null;
+    const products = LS.get("pos_products", []);
+
+    return products.find((item) => {
+      const productCode = normalizeBarcode(item.barcode);
+      return productCode === scannedCode ||
+        productCode === scannedCode.replace(/^0/, "") ||
+        productCode.replace(/^0/, "") === scannedCode;
+    });
+  };
+
   const searchProducts = (query) => {
     setSearchQuery(query);
 
@@ -44,11 +60,12 @@ export const POSScreen = ({ user, settings, notify }) => {
     }
 
     const q = query.toLowerCase();
+    const barcodeQuery = normalizeBarcode(query);
     const products = LS.get("pos_products", []);
     const results = products.filter((product) =>
-      product.name.toLowerCase().includes(q) ||
-      product.barcode.includes(query) ||
-      product.category.toLowerCase().includes(q)
+      String(product.name || "").toLowerCase().includes(q) ||
+      normalizeBarcode(product.barcode).includes(barcodeQuery) ||
+      String(product.category || "").toLowerCase().includes(q)
     );
 
     setSearchResults(results.slice(0, 8));
@@ -99,12 +116,12 @@ export const POSScreen = ({ user, settings, notify }) => {
   };
 
   const handleBarcodeDetected = (code) => {
-    const products = LS.get("pos_products", []);
-    const product = products.find((item) => item.barcode === code);
+    const product = findProductByBarcode(code);
 
     if (product) {
+      setLastScannedProduct(product);
       addToCart(product);
-      notify(`Added: ${product.name}`, "success");
+      notify(`Added: ${product.name} - ${cur}${product.price}`, "success");
       return;
     }
 
@@ -170,17 +187,20 @@ if (videoRef.current) videoRef.current.srcObject = stream;
     lastBarcodeRef.current = "";
     setScanning(false);
     setLastBarcode("");
+    setLastScannedProduct(null);
   };
 
   const handleManualBarcode = (event) => {
     if (event.key !== "Enter") return;
 
     const code = searchQuery.trim();
-    const products = LS.get("pos_products", []);
-    const product = products.find((item) => item.barcode === code);
+    const product = findProductByBarcode(code);
 
     if (product) {
+      setLastBarcode(code);
+      setLastScannedProduct(product);
       addToCart(product);
+      notify(`Added: ${product.name} - ${cur}${product.price}`, "success");
       setSearchQuery("");
       setSearchResults([]);
       return;
@@ -204,6 +224,8 @@ if (videoRef.current) videoRef.current.srcObject = stream;
         searchQuery={searchQuery}
         searchResults={searchResults}
         scanning={scanning}
+        lastBarcode={lastBarcode}
+        lastScannedProduct={lastScannedProduct}
         videoRef={videoRef}
         onSearch={searchProducts}
         onManualBarcode={handleManualBarcode}
