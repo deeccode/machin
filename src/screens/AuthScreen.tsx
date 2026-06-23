@@ -83,7 +83,8 @@ export const AuthScreen = ({ onLogin }) => {
   
   return ( 
      <div className="auth-page" style={{ 
-      minHeight: "100vh", 
+      minHeight: "100dvh", 
+      width: "100vw",
     background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f2027 100%)",
      display: "flex",
       alignItems: "center",
