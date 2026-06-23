@@ -12,21 +12,31 @@ export const ProductsScreen = ({ notify, settings }) => {
   const [form, setForm] = useState({ name: "", barcode: "", category: "", price: "", cost: "", stock: "", minStock: "", unit: "pcs", description: "", image: "" }); 
   const suppliers = LS.get("pos_suppliers", []); 
   const categories = ["All", ...new Set(products.map(p => p.category))]; 
+  const cleanBarcode = (value = "") => String(value).trim().replace(/\s+/g, "");
+  const barcodeKey = (value = "") => cleanBarcode(value).replace(/\D/g, "");
   const filtered = products.filter(p => { 
     const q = search.toLowerCase(); 
-    return (categoryFilter === "All" || p.category === categoryFilter) && (p.name.toLowerCase().includes(q) || p.barcode.includes(q)); 
+    return (categoryFilter === "All" || p.category === categoryFilter) && (p.name.toLowerCase().includes(q) || String(p.barcode || "").includes(search)); 
   }); 
   const save = () => { 
-    if (!form.name || !form.barcode || !form.price) { notify("Name, barcode, and price required", "error"); 
+    const barcode = cleanBarcode(form.barcode);
+    const normalizedBarcode = barcodeKey(barcode);
+
+    if (!form.name || !barcode || !form.price) { notify("Name, barcode, and price required", "error"); 
+      return; } 
+    if (!normalizedBarcode) { notify("Barcode must contain numbers", "error"); 
       return; } 
     const ps = LS.get("pos_products", []); 
+    const duplicate = ps.find(p => barcodeKey(p.barcode) === normalizedBarcode && (modal === "add" || p.id !== modal.id));
+    if (duplicate) { notify(`Barcode already belongs to ${duplicate.name}`, "error"); return; }
+    const productData = { ...form, barcode, price: Number(form.price), cost: Number(form.cost || 0), stock: Number(form.stock || 0), minStock: Number(form.minStock || 0) };
+
     if (modal === "add") { 
-      if (ps.find(p => p.barcode === form.barcode)) { notify("Barcode already exists", "error"); return; } 
-      const newP = { ...form, id: genId(), price: Number(form.price), cost: Number(form.cost), stock: Number(form.stock), minStock: Number(form.minStock) }; 
+      const newP = { ...productData, id: genId() }; 
       LS.set("pos_products", [...ps, newP]); 
       notify("Product added!", "success"); 
     } else { 
-      const updated = ps.map(p => p.id === modal.id ? { ...p, ...form, price: Number(form.price), cost: Number(form.cost), stock: Number(form.stock), minStock: Number(form.minStock) } : p); 
+      const updated = ps.map(p => p.id === modal.id ? { ...p, ...productData } : p); 
       LS.set("pos_products", updated); 
       notify("Product updated!", "success"); 
     } 
@@ -168,7 +178,7 @@ export const ProductsScreen = ({ notify, settings }) => {
           padding: "0 24px 24px"
            }}> 
 
-        <table 
+        <table className="products-table"
         style={{
            width: "100%", 
            borderCollapse: "collapse",
@@ -196,11 +206,11 @@ export const ProductsScreen = ({ notify, settings }) => {
           </thead> 
           <tbody> 
             {filtered.map(p => ( 
-              <tr key={p.id} 
+              <tr className="products-row" key={p.id} 
               style={{ 
                 borderBottom: "1px solid rgba(255,255,255,0.04)" }}> 
 
-                <td 
+                <td className="products-product-cell" data-label="Product"
                 style={{
                    padding: "12px 14px" 
                    }}> 
@@ -235,14 +245,14 @@ export const ProductsScreen = ({ notify, settings }) => {
                   </div> 
                 </td> 
 
-                <td 
+                <td data-label="Barcode"
                 style={{
                    padding: "12px 14px",
                     color: "#64748b", 
                     fontSize: 12, 
                     fontFamily: "monospace" }}>{p.barcode}</td> 
 
-                <td
+                <td data-label="Category"
                  style={{
                    padding: "12px 14px" }}><span 
                    style={{ 
@@ -252,28 +262,28 @@ export const ProductsScreen = ({ notify, settings }) => {
                        fontSize: 11,
                         fontWeight: 600 }}>{p.category}</span></td> 
 
-                <td 
+                <td data-label="Price"
                 style={{
                    padding: "12px 14px",
                     color: "#22c55e", 
                     fontWeight: 700, fontSize: 13 }}>{fmt(p.price,
                      cur)}</td> 
 
-                <td 
+                <td data-label="Cost"
                 style={{
                    padding: "12px 14px",
                     color: "#64748b", 
                     fontSize: 13 }}>{fmt(p.cost, cur)}
                     </td> 
 
-                <td 
+                <td data-label="Stock"
                 style={{ 
                   padding: "12px 14px",
                    color: "#e2e8f0", 
                    fontSize: 13, 
                    fontWeight: 600 }}>{p.stock}</td> 
 
-                <td 
+                <td data-label="Status"
                 style={{ 
                   padding: "12px 14px" 
                   }}> 
@@ -306,7 +316,7 @@ export const ProductsScreen = ({ notify, settings }) => {
 
                 </td> 
 
-                <td 
+                <td data-label="Actions"
                 style={{
                    padding: "12px 14px" }}> 
 
@@ -411,8 +421,8 @@ export const ProductsScreen = ({ notify, settings }) => {
                 </div> 
               ))} 
 
-              <div s
-              tyle={{ 
+              <div
+              style={{ 
                 gridColumn: "span 2"
                  }}> 
 
