@@ -82,7 +82,7 @@ export default function App() {
   ].filter(n => n.roles.includes(user.role)); 
   return ( 
     <div className={`app-shell ${isMobileMenuOpen ? "mobile-menu-open" : ""}`} 
-    style={{ display: "flex", height: "100vh", fontFamily: "'Segoe UI', system-ui, sans-serif", background: "#0f172a", overflow: "hidden" }}> 
+    style={{ display: "flex", width: "100vw", height: "100dvh", fontFamily: "'Segoe UI', system-ui, sans-serif", background: "#0f172a", overflow: "hidden" }}> 
 
       {isMobileMenuOpen && <button className="mobile-menu-backdrop" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} />}
 
