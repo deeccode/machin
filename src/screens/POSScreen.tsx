@@ -1,298 +1,288 @@
 // @ts-nocheck
-import { Icon } from "../../components/Icon";
-import { fmt } from "../../utils/format";
+import { useEffect, useRef, useState } from "react";
+// use reference is used to keep and update a value later 
+import { LS } from "../utils/storage";
+import { POSCartPanel } from "./pos/POSCartPanel";
+import { POSSearchPanel } from "./pos/POSSearchPanel";
+import { POSSummaryPanel } from "./pos/POSSummaryPanel";
+import { PaymentModal } from "./pos/PaymentModal";
+import { ReceiptModal } from "./pos/ReceiptModal";
 
-export const POSSearchPanel = ({
-  cur,
-  searchQuery,
-  searchResults,
-  scanning,
-  lastBarcode,
-  lastScannedProduct,
-  videoRef,
-  onSearch,
-  onManualBarcode,
-  onToggleScanning,
-  onAddToCart,
-}) => (
-  <div className="pos-search-panel" 
-  style={{ 
-    width: 320, 
-    borderRight: "1px solid rgba(255,255,255,0.06)", 
-    display: "flex",
-     flexDirection: "column",
-      background: "#1a2540" 
-      // Dark blue background
-      }}>
-    <div
-     style={{ 
-      padding: 16,
-       borderBottom: "1px solid rgba(255,255,255,0.06)" 
-       }}>
-<div 
-         style={{
-          color: "#94a3b8",
-          fontSize: 11, 
-          fontWeight: 700, 
-          textTransform: "uppercase", letterSpacing: 1.5, 
-          marginBottom: 12
-           }}>
-            Scanner & Search
- </div>
-      <div
-       style={{
-         position: "relative"
-          }}>
-        <input
-          value={searchQuery}
-          onChange={(event) =>
-           onSearch(event.target.value)
-          }
-          onKeyDown={onManualBarcode}
-          placeholder=
-          "Search name, barcode, category..."
-          style={{ 
-            width: "100%",
-             padding: "10px 10px 10px 36px", borderRadius: 10, 
-             border: "1px solid rgba(255,255,255,0.1)", 
-             background: "rgba(255,255,255,0.05)", 
-             color: "#fff", 
-             fontSize: 13,
-              outline: "none", 
-              boxSizing: "border-box"
-             }}
+export const POSScreen = ({ user, settings, notify }) => { 
+  const [cart, setCart] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [scanning, setScanning] = useState(false);
+  const [discount, setDiscount] = useState(0);
+  const [discountType, setDiscountType] = useState("percent");
+  const [paymentMode, setPaymentMode] = useState(false);
+  const [receipt, setReceipt] = useState(null);
+  const [lastBarcode, setLastBarcode] = useState("");
+  const [lastScannedProduct, setLastScannedProduct] = useState(null);
+
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const scanIntervalRef = useRef(null);
+  const scanningRef = useRef(false);
+  const lastBarcodeRef = useRef("");
+
+  const cur = settings.currency || "\u20a6";
+  const tax = (settings.taxRate || 0) / 100;
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const discountAmt = discountType === "percent"
+   ? subtotal * (discount / 100) 
+   : Math.min(discount, subtotal);
+  const taxAmt = (subtotal - discountAmt) * tax;
+  const total = subtotal - discountAmt + taxAmt;
+
+  const normalizeBarcode = (code = "") => String(code).replace(/\D/g, "");
+
+  const findProductByBarcode = (code) => {
+    const scannedCode = normalizeBarcode(code);
+    if (!scannedCode) return null;
+    const products = LS.get("pos_products", []);
+
+    return products.find((item) => {
+      const productCode = normalizeBarcode(item.barcode);
+      return productCode === scannedCode ||
+        productCode === scannedCode.replace(/^0/, "") ||
+        productCode.replace(/^0/, "") === scannedCode;
+    });
+  };
+
+  const searchProducts = (query) => {
+    setSearchQuery(query);
+
+    if (!query.trim()) {
+      setSearchResults([]);
+      // if seach box is empty then clear result 
+      return;
+    }
+
+    const q = query.toLowerCase();
+    const barcodeQuery = normalizeBarcode(query);
+    const products = LS.get("pos_products", []);
+    const results = products.filter((product) =>
+      String(product.name || "").toLowerCase().includes(q) ||
+      normalizeBarcode(product.barcode).includes(barcodeQuery) ||
+      String(product.category || "").toLowerCase().includes(q)
+    );
+
+    setSearchResults(results.slice(0, 8));
+  };
+
+  const addToCart = (product) => {
+    if (product.stock <= 0) {
+      notify("Out of stock!", "error");
+      return;
+    }
+
+    setCart((prev) => {
+      const existing = prev.find((item) => item.id === product.id);
+
+      if (!existing) return [...prev, { ...product, qty: 1 }];
+
+      if (existing.qty >= product.stock) {
+        notify("Max stock reached", "error");
+        return prev;
+      }
+
+      return prev.map((item) => item.id === product.id ? { ...item, qty: item.qty + 1 } : item);
+    });
+
+    setSearchQuery("");
+    setSearchResults([]);
+  };
+
+  const removeFromCart = (id) => setCart((prev) => prev.filter((item) => item.id !== id));
+  // remove item and keep the selected item  
+
+  const updateQty = (id, delta) => {
+    setCart((prev) => prev.map((item) => {
+      if (item.id !== id) return item;
+
+      const newQty = item.qty + delta;
+      if (newQty <= 0)
+         return null;
+
+      if (newQty > item.stock) {
+        notify("Max stock reached", "error");
+        return item;
+      }
+      // sharppppppppppp
+
+      return { ...item, qty: newQty };
+    }).filter(Boolean));
+  };
+
+  const handleBarcodeDetected = (code) => {
+    const product = findProductByBarcode(code);
+
+    if (product) {
+      setLastScannedProduct(product);
+      addToCart(product);
+      notify(`Added: ${product.name} - ${cur}${product.price}`, "success");
+      return;
+    }
+
+    notify(`Barcode ${code} not found in system`, "error");
+  };
+
+  const startScanning = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      streamRef.current = stream;
+      scanningRef.current = true;
+
+if (videoRef.current) videoRef.current.srcObject = stream;
+// Show camera video inside this video tag
+      setScanning(true);
+
+      if ("BarcodeDetector" in window) {
+        const detector = new window.BarcodeDetector({
+          formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "qr_code", "code_39"],
+        });
+
+        const detect = async () => {
+          if (!videoRef.current || !scanningRef.current) return;
+
+          try {
+            const barcodes = await detector.detect(videoRef.current);
+            if (!barcodes.length) return;
+
+            const code = barcodes[0].rawValue;
+            if (code && code !== lastBarcodeRef.current) {
+              lastBarcodeRef.current = code;
+              setLastBarcode(code);
+              handleBarcodeDetected(code);
+            }
+          } catch {}
+        };
+
+   scanIntervalRef.current = setInterval(detect, 500);
+  //  the scanner ckecks bacodes every sec 
+      } else {
+        notify("BarcodeDetector not supported. Use manual search or type barcode.", "error");
+      }
+    } catch {
+      scanningRef.current = false;
+      notify("Camera access denied or unavailable.", "error");
+    }
+  };
+
+  const stopScanning = () => {
+    scanningRef.current = false;
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
+
+    if (videoRef.current) videoRef.current.srcObject = null;
+    lastBarcodeRef.current = "";
+    setScanning(false);
+    setLastBarcode("");
+    setLastScannedProduct(null);
+  };
+
+  const handleManualBarcode = (event) => {
+    if (event.key !== "Enter") return;
+
+    const code = searchQuery.trim();
+    const product = findProductByBarcode(code);
+
+    if (product) {
+      setLastBarcode(code);
+      setLastScannedProduct(product);
+      addToCart(product);
+      notify(`Added: ${product.name} - ${cur}${product.price}`, "success");
+      setSearchQuery("");
+      setSearchResults([]);
+      return;
+    }
+
+    searchProducts(code);
+  };
+
+  useEffect(() => () => stopScanning(), []);
+
+  const clearCart = () => {
+    setCart([]);
+    setDiscount(0);
+    setPaymentMode(false);
+  };
+
+  return (
+    <div className="pos-layout" style={{ display: "flex", height: "100%", background: "#0f172a" }}>
+      <POSSearchPanel
+        cur={cur}
+        searchQuery={searchQuery}
+        searchResults={searchResults}
+        scanning={scanning}
+        lastBarcode={lastBarcode}
+        lastScannedProduct={lastScannedProduct}
+        videoRef={videoRef}
+        onSearch={searchProducts}
+        onManualBarcode={handleManualBarcode}
+        onToggleScanning={scanning ? stopScanning : startScanning}
+        onAddToCart={addToCart}
+      />
+
+      <POSCartPanel
+        cart={cart}
+        cur={cur}
+        user={user}
+        onClearCart={clearCart}
+        onRemoveFromCart={removeFromCart}
+        onUpdateQty={updateQty}
+      />
+
+      <POSSummaryPanel
+        cart={cart}
+        cur={cur}
+        settings={settings}
+        subtotal={subtotal}
+        discount={discount}
+        discountType={discountType}
+        discountAmt={discountAmt}
+        taxAmt={taxAmt}
+        total={total}
+        onDiscountChange={setDiscount}
+        onDiscountTypeChange={setDiscountType}
+        onStartPayment={() => cart.length > 0 && setPaymentMode(true)}
+      />
+
+      {paymentMode && (
+        <PaymentModal
+          cart={cart}
+          subtotal={subtotal}
+          discountAmt={discountAmt}
+          taxAmt={taxAmt}
+          total={total}
+          settings={settings}
+          user={user}
+          onSuccess={(txn) => {
+            setReceipt(txn);
+            setCart([]);
+            setDiscount(0);
+            setPaymentMode(false);
+            notify("Payment successful! Receipt generated.", "success");
+          }}
+          onClose={() => setPaymentMode(false)}
         />
-        <span 
-        style={{ 
-          position: "absolute", 
-          left: 10, top: "50%", 
-          transform: "translateY(-50%)", color: "#64748b" 
-          }}>
-            <Icon name="search" size={16} />
-          </span>
-      </div>
-
-      <button
-       onClick={onToggleScanning}
-       style={{ 
-        width: "100%",
-         marginTop: 10,
-          padding: "10px",
-           borderRadius: 10,
-            border: "none", 
-            cursor: "pointer", 
-            fontWeight: 700, 
-            fontSize: 13, 
-            display: "flex",
-             alignItems: "center", justifyContent: "center",
-              gap: 8, 
-              background: scanning ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.15)", color: scanning ? "#f87171" : "#22c55e"
-               }}>
-        <Icon name={scanning ? "x" : "camera"} size={16} /> {scanning ? "Stop Scanner" : "Start Camera Scanner"}
-      </button>
-    </div>
-
-    <div 
-    style={{ 
-      padding: 12,
-       borderBottom: "1px solid rgba(255,255,255,0.06)"
-        }}>
-      <div 
-      style={{ 
-        position: "relative", 
-        width: "100%",
-         aspectRatio: "4/3",
-          borderRadius: 12,
-           overflow: "hidden",
-            background: "#0f172a",
-             border: "2px solid rgba(34,197,94,0.2)"
-              }}>
-        <video ref={videoRef} autoPlay playsInline muted 
-        style={{
-           width: "100%",
-            height: "100%",
-             objectFit: "cover" 
-             }}
-              />
-        {!scanning && (
-          <div 
-          style={{ 
-            position: "absolute", 
-            inset: 0,
-             display: "flex",
-              flexDirection: "column", alignItems: "center", justifyContent: "center",
-               color: "rgba(255,255,255,0.2)" 
-               }}>
-            <Icon name="camera" size={40} />
-            <div 
-            style={{ 
-              fontSize: 12,
-               marginTop: 8 
-               }}>Camera off</div>
-          </div>
-        )}
-        {scanning && (
-          <div 
-          style={{ 
-            position: "absolute", 
-            inset: 0, 
-            display: "flex",
-             alignItems: "center", justifyContent: "center", pointerEvents: "none" 
-             }}>
-            <div 
-            style={{ 
-              position: "relative",
-               width: "60%",
-                height: "40%",
-                 border: "2px solid #22c55e", borderRadius: 8, 
-                 boxShadow: "0 0 0 2000px rgba(0,0,0,0.3)" 
-                 }}>
-              <div
-               style={{
-                 position: "absolute",
-                  left: 0, 
-                  width: "100%",
-                   height: 2,
-                    background: "rgba(34,197,94,0.8)",
-                     animation: "scan-line 1.5s ease-in-out infinite alternate" 
-                     }} />
-            </div>
-          </div>
-        )}
-      </div>
-      {scanning && <div 
-      style={{ 
-        textAlign: "center",
-         color: "#22c55e",
-          fontSize: 12, 
-          marginTop: 6, 
-          animation: "pulse 1.5s infinite" 
-          }}>Scanning...</div>}
-      {lastScannedProduct && (
-        <div
-          style={{
-            marginTop: 10,
-            padding: 10,
-            borderRadius: 10,
-            border: "1px solid rgba(34,197,94,0.22)",
-            background: "rgba(34,197,94,0.08)"
-          }}>
-          <div
-            style={{
-              color: "#86efac",
-              fontSize: 11,
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: 0,
-              marginBottom: 6
-            }}>
-            Product found
-          </div>
-          <div
-            style={{
-              color: "#e2e8f0",
-              fontSize: 13,
-              fontWeight: 700,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap"
-            }}>
-            {lastScannedProduct.name}
-          </div>
-          <div
-            style={{
-              color: "#64748b",
-              fontSize: 11,
-              marginTop: 3,
-              overflowWrap: "anywhere"
-            }}>
-            Barcode: {lastScannedProduct.barcode || lastBarcode}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
-              marginTop: 8
-            }}>
-            <span style={{ color: "#94a3b8", fontSize: 11 }}>
-              {lastScannedProduct.category} | Stock: {lastScannedProduct.stock}
-            </span>
-            <span style={{ color: "#22c55e", fontSize: 13, fontWeight: 800 }}>
-              {fmt(lastScannedProduct.price, cur)}
-            </span>
-          </div>
-        </div>
       )}
-    </div>
 
-    <div style={{
-       flex: 1, 
-       overflowY: "auto",
-        padding: 8 
-        }}>
-  {searchResults.length > 0 ? searchResults.map((product) => (
-        <button
-          key={product.id}
-          onClick={() => onAddToCart(product)}
-          style={{
-             width: "100%",
-              padding: "10px 12px", borderRadius: 10,
-               border: "1px solid rgba(255,255,255,0.07)",
-                background: "rgba(255,255,255,0.03)", 
-                marginBottom: 6,
-                 cursor: "pointer",
-                  display: "flex", justifyContent: "space-between",
-                   alignItems: "center", gap: 12, textAlign: "left", transition: "all 0.15s" }}
-          onMouseEnter={(event) => event.currentTarget.style.background = "rgba(34,197,94,0.1)"}
-          onMouseLeave={(event) => event.currentTarget.style.background = "rgba(255,255,255,0.03)"}
-        >
-          <div 
-          style={{ 
-            minWidth: 0 
-            }}>
-            <div 
-            style={{ 
-              color: "#e2e8f0",
-               fontSize: 13, 
-               fontWeight: 600,
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
-                 }}>{product.name}</div>
-            <div 
-            style={{ 
-              color: "#64748b",
-               fontSize: 11 
-               }}>
-                {product.category}
-                 |
-               Stock: {product.stock}
-               </div>
-          </div>
-          <div 
-          style={{
-             color: "#22c55e",
-              fontSize: 13,
-               fontWeight: 700,
-                flexShrink: 0 
-                }}>
-              {fmt(product.price, cur)}
-              </div>
-        </button>
-      )) : (
-        <div
-         style={{ 
-          padding: "30px 16px",
-           textAlign: "center", 
-           color: "#334155"
-            }}>
-          <Icon name="search" size={32} />
-          <div style={{
-             fontSize: 13, 
-             marginTop: 8 
-          }}>Search products or scan barcode</div>
-        </div>
-      )}
+      {receipt && <ReceiptModal txn={receipt} settings={settings} onClose={() => setReceipt(null)} />}
+
+      <style>{`
+        @keyframes scan-line { from { top: 30%; } to { top: 68%; } }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+      `}</style>
     </div>
-  </div>
-);
+  );
+};
