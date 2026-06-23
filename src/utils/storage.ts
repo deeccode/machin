@@ -218,7 +218,7 @@ export const seedDemoData = () => {
       }, 
 
       { id: "p11", 
-      barcode: "9300675003414", 
+      barcode: "9780722538074", 
       name: "Fanta", 
       category: "Drinks",
        price: 300, 
