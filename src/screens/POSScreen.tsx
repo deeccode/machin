@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { useEffect, useRef, useState } from "react";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 // use reference is used to keep and update a value later 
 import { LS } from "../utils/storage";
 import { POSCartPanel } from "./pos/POSCartPanel";
@@ -21,8 +22,7 @@ export const POSScreen = ({ user, settings, notify }) => {
   const [lastScannedProduct, setLastScannedProduct] = useState(null);
 
   const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const scanIntervalRef = useRef(null);
+  const zxingControlsRef = useRef(null);
   const scanningRef = useRef(false);
   const lastBarcodeRef = useRef("");
   const lastScanTimeRef = useRef(0);
@@ -146,49 +146,49 @@ export const POSScreen = ({ user, settings, notify }) => {
     return false;
   };
 
+  const processDetectedBarcode = (code) => {
+    const normalizedCode = normalizeBarcode(code);
+    const now = Date.now();
+    const isSameBarcode = normalizedCode && normalizedCode === lastBarcodeRef.current;
+    const shouldRetryMissingBarcode = isSameBarcode && !lastScanFoundRef.current && now - lastScanTimeRef.current > 1800;
+
+    if (normalizedCode && (!isSameBarcode || shouldRetryMissingBarcode)) {
+      lastBarcodeRef.current = normalizedCode;
+      lastScanTimeRef.current = now;
+      lastScanFoundRef.current = handleBarcodeDetected(code);
+    }
+  };
+
   const startScanning = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      streamRef.current = stream;
-      scanningRef.current = true;
+      if (!navigator.mediaDevices?.getUserMedia) {
+        notify("Camera is not available in this browser.", "error");
+        return;
+      }
 
-if (videoRef.current) videoRef.current.srcObject = stream;
-// Show camera video inside this video tag
+      scanningRef.current = true;
       setScanning(true);
 
-      if ("BarcodeDetector" in window) {
-        const detector = new window.BarcodeDetector({
-          formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "qr_code", "code_39"],
-        });
+      const reader = new BrowserMultiFormatReader();
+      const cameraConstraints = { video: { facingMode: { ideal: "environment" } } };
+      const fallbackConstraints = { video: true };
 
-        const detect = async () => {
-          if (!videoRef.current || !scanningRef.current) return;
+      const scanFrom = (constraints) => reader.decodeFromConstraints(
+        constraints,
+        videoRef.current,
+        (result) => {
+          if (result && scanningRef.current) processDetectedBarcode(result.getText());
+        }
+      );
 
-          try {
-            const barcodes = await detector.detect(videoRef.current);
-            if (!barcodes.length) return;
-
-            const code = barcodes[0].rawValue;
-            const normalizedCode = normalizeBarcode(code);
-            const now = Date.now();
-            const isSameBarcode = normalizedCode && normalizedCode === lastBarcodeRef.current;
-            const shouldRetryMissingBarcode = isSameBarcode && !lastScanFoundRef.current && now - lastScanTimeRef.current > 1800;
-
-            if (normalizedCode && (!isSameBarcode || shouldRetryMissingBarcode)) {
-              lastBarcodeRef.current = normalizedCode;
-              lastScanTimeRef.current = now;
-              lastScanFoundRef.current = handleBarcodeDetected(code);
-            }
-          } catch {}
-        };
-
-   scanIntervalRef.current = setInterval(detect, 500);
-  //  the scanner ckecks bacodes every sec 
-      } else {
-        notify("BarcodeDetector not supported. Use manual search or type barcode.", "error");
+      try {
+        zxingControlsRef.current = await scanFrom(cameraConstraints);
+      } catch {
+        zxingControlsRef.current = await scanFrom(fallbackConstraints);
       }
     } catch {
       scanningRef.current = false;
+      setScanning(false);
       notify("Camera access denied or unavailable.", "error");
     }
   };
@@ -196,17 +196,15 @@ if (videoRef.current) videoRef.current.srcObject = stream;
   const stopScanning = () => {
     scanningRef.current = false;
 
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
+    if (zxingControlsRef.current) {
+      zxingControlsRef.current.stop();
+      zxingControlsRef.current = null;
     }
 
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
-      scanIntervalRef.current = null;
+    if (videoRef.current?.srcObject) {
+      videoRef.current.srcObject.getTracks?.().forEach((track) => track.stop());
+      videoRef.current.srcObject = null;
     }
-
-    if (videoRef.current) videoRef.current.srcObject = null;
     lastBarcodeRef.current = "";
     lastScanTimeRef.current = 0;
     lastScanFoundRef.current = false;
