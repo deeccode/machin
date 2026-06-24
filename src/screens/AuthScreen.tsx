@@ -85,19 +85,23 @@ export const AuthScreen = ({ onLogin }) => {
      <div className="auth-page" style={{ 
       minHeight: "100dvh", 
       width: "100vw",
+      padding: "24px 16px",
     background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f2027 100%)",
      display: "flex",
-      alignItems: "center",
+      alignItems: "flex-start",
        justifyContent: "center", 
+       overflowY: "auto",
+       overflowX: "hidden",
      fontFamily: "'Segoe UI', system-ui, sans-serif"
       }}> 
       <div className="auth-card" style={{
-         width: 420,
+         width: "min(420px, 100%)",
           background: "rgba(255,255,255,0.05)",
          backdropFilter: "blur(20px)", 
          border: "1px solid rgba(255,255,255,0.12)", 
          borderRadius: 20, 
          padding: 40,
+          margin: "0 auto",
           boxShadow: "0 25px 50px rgba(0,0,0,0.5)" 
           }}> 
         {/* Logo */} 
